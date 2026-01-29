@@ -32,10 +32,15 @@ def produce(state, ID, item):
 	else:
 		return False
 
+########## End General methods ##########
+
+########## Begin General Tasks ##########
 pyhop.declare_methods('have_enough', check_enough, produce_enough)
 pyhop.declare_methods('produce', produce)
 
-########## End General methods ##########
+########## End General Tasks ##########
+
+
 
 ########## begin recipe methods ##########
 
@@ -43,7 +48,6 @@ def punch_for_wood(state, ID):
 	return [('op_punch_for_wood', ID)]
 
 def wooden_axe_for_wood(state, ID):
-	#forget the optimization, just try to make it so that it can use wooden axe
 	return [('have_enough', ID, 'wooden_axe', 1),('op_wooden_axe_for_wood', ID)]
 	return False
 
@@ -60,13 +64,18 @@ def craft_bench(state,ID):
 	return[('have_enough', ID, 'plank', 4),('op_craft_bench', ID)]
 # your code here
 
+########## End recipe methods ##########
+
+########## Begin recipe Tasks ##########
 pyhop.declare_methods('produce_wood', wooden_axe_for_wood, punch_for_wood)
 pyhop.declare_methods('produce_wooden_axe', craft_wooden_axe_at_bench)
 pyhop.declare_methods('produce_plank', craft_plank)
 pyhop.declare_methods('produce_stick', craft_stick)
 pyhop.declare_methods('produce_bench', craft_bench)
 
-########## end recipe methods ##########
+########## End recipe Tasks ##########
+
+
 
 ########## Begin Operators ##########
 

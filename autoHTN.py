@@ -91,6 +91,14 @@ def add_heuristic(data, ID):
 	# e.g. def heuristic2(...); pyhop.add_check(heuristic2)
 	def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
 		# your code here
+		#note: when testing this function use print() and  python autoHTN.py > out.txt to easily test results
+		"""
+		Preventing Infinite Loops Options:
+		1: Implemented in this function very similar to if statements in manualHTN produce() function which check if certain items have already been made
+		2: implemented within make_methods() and similar to reordering manualHTN methods
+		3: implemented within declare_methods() and similar to reordering manualHTN tasks
+		4: Bahar said really difficult, so we prolly shouldn't waste time on it 
+		"""
 		return False # if True, prune this branch
 
 	pyhop.add_check(heuristic)
