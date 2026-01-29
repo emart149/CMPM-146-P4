@@ -61,10 +61,10 @@ def craft_bench(state,ID):
 # your code here
 
 pyhop.declare_methods('produce_wood', wooden_axe_for_wood, punch_for_wood)
-pyhop.declare_methods('produce_wooden_axe', craft_wooden_axe_at_bench,craft_bench, craft_stick,  craft_plank, punch_for_wood)
-pyhop.declare_methods('produce_plank', craft_plank , punch_for_wood)
-pyhop.declare_methods('produce_stick', craft_stick, craft_plank, punch_for_wood)
-pyhop.declare_methods('produce_bench', craft_bench, craft_plank, punch_for_wood)
+pyhop.declare_methods('produce_wooden_axe', craft_wooden_axe_at_bench)
+pyhop.declare_methods('produce_plank', craft_plank)
+pyhop.declare_methods('produce_stick', craft_stick)
+pyhop.declare_methods('produce_bench', craft_bench)
 
 ########## end recipe methods ##########
 

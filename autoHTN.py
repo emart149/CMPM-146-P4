@@ -35,13 +35,35 @@ def make_operator(rule):
 		"""
 		I think that rule is the input of which action we are making an operator for at the current moment
 		"""
-		for product in rule['Produces']:
-			state.product[ID] += rule['Produces'][product]
+		has_prereqs= True
 		
-		for requirement in rule['Requirements']:
-			state.requirement[ID] -= rule['Requirements'][requirement]
+		for requirement in rule['Requires']:
+			requirement_cur_value = getattr(state, requirement)[ID]
+			if requirement_cur_value < rule['Requires'][requirement]:
+				has_prereqs = False
+
+		for item in rule['Consumes']:
+			item_cur_value = getattr(state, item)[ID]
+			if item_cur_value < rule['Consumes'][item]:
+				has_prereqs = False
+
+		if state.time[ID] < rule['Time']:
+			has_prereqs = False
+
+		if has_prereqs:
+			for product in rule['Produces']:
+				product_cur_value = getattr(state, product)[ID]
+				setattr(state, product , {ID: product_cur_value + rule['Produces'][product]})
+			
+			for item in rule['Consumes']:
+				item_cur_value = getattr(state, item)[ID]
+				setattr(state, item , {ID: item_cur_value - rule['Consumes'][item]})
+
+			state.time[ID] -= rule['Time']
+			return state
+		else:
+			return False
 		# your code here
-	operator.__name__ = "op_"+ rule
 	return operator
 
 def declare_operators(data):
@@ -52,10 +74,14 @@ def declare_operators(data):
 	
 	operators_list = []
 
-	for action in data['Recipes']:
-		operators_list.append(make_operator(action))
+	for recipe_name in data['Recipes']:
+		new_operator = make_operator(data['Recipes'][recipe_name])
+		new_operator.__name__ = "op_" + recipe_name
+		#print(f"{action}")
+		operators_list.append(new_operator)
 
-	pyhop.declare_operators(operators_list)
+	pyhop.declare_operators(*operators_list)
+	pyhop.print_operators()
 	# your code here
 	# hint: call make_operator, then declare the operator to pyhop using pyhop.declare_operators(o1, o2, ..., ok)
 
