@@ -41,7 +41,7 @@ def make_operator(rule):
 		for requirement in rule['Requirements']:
 			state.requirement[ID] -= rule['Requirements'][requirement]
 		# your code here
-		
+	operator.__name__ = "op_"+ rule
 	return operator
 
 def declare_operators(data):
@@ -54,6 +54,8 @@ def declare_operators(data):
 
 	for action in data['Recipes']:
 		operators_list.append(make_operator(action))
+
+	pyhop.declare_operators(operators_list)
 	# your code here
 	# hint: call make_operator, then declare the operator to pyhop using pyhop.declare_operators(o1, o2, ..., ok)
 
@@ -99,7 +101,7 @@ def set_up_goals(data, ID):
 
 if __name__ == '__main__':
 	import sys
-	rules_filename = 'src/crafting.json'
+	rules_filename = 'crafting.json'
 	if len(sys.argv) > 1:
 		rules_filename = sys.argv[1]
 
