@@ -18,8 +18,23 @@ pyhop.declare_methods('produce', produce)
 def make_method(name, rule):
 	def method(state, ID):
 		# your code here
-		pass
+		subtasks = []
 
+		if 'Requires' in rule:
+			for item, amount in rule['Requires'].items():
+				subtasks.append(('have enough', ID, item, amount))
+
+		if 'Consumes' in rule:
+			for item, amount in rule['Consumes'].items():
+				subtasks.append(('have enough', ID, item, amount))	
+
+		op_name = 'op_{}'.format(name.replace(' ', '_'))
+		subtasks.append(op_name, ID) 
+
+
+		return subtasks
+
+	method.__name__ = 'produce_{}'.format(name.replace(' ', '_'))
 	return method
 
 def declare_methods(data):
@@ -28,7 +43,28 @@ def declare_methods(data):
 
 	# your code here
 	# hint: call make_method, then declare the method to pyhop using pyhop.declare_methods('foo', m1, m2, ..., mk)	
-	pass			
+	rec_prod = []
+
+	for rec_name, rule in data['Recipes'].items():
+		for product in rule['Produces']:
+			if product not in rec_prod:
+				rec_prod[product] = []
+		
+			rec_prod[product].append({
+				'name': rec_name,
+				'rule': rule,
+				'time': rule.get('Time', 1)
+			})
+
+	for product, rec_list in rec_prod.items():
+		rec_list.sort(key=lambda x: x['time'])
+
+		method_list = []
+		for rec_info in rec_list:
+			method_func = make_method(rec_info['name'], rec_info['rule'])
+			method_list.append(method_func)
+
+		pyhop.declare_methods('produce_{}'.format(product), *method_list)
 
 def make_operator(rule):
 	def operator(state, ID):
