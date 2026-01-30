@@ -29,7 +29,7 @@ def make_method(name, rule):
 				subtasks.append(('have enough', ID, item, amount))	
 
 		op_name = 'op_{}'.format(name.replace(' ', '_'))
-		subtasks.append(op_name, ID) 
+		subtasks.append((op_name, ID)) 
 
 
 		return subtasks
@@ -43,7 +43,7 @@ def declare_methods(data):
 
 	# your code here
 	# hint: call make_method, then declare the method to pyhop using pyhop.declare_methods('foo', m1, m2, ..., mk)	
-	rec_prod = []
+	rec_prod = {}
 
 	for rec_name, rule in data['Recipes'].items():
 		for product in rule['Produces']:
@@ -187,7 +187,7 @@ if __name__ == '__main__':
 	define_ordering(data, 'agent')
 
 	# pyhop.print_operators()
-	# pyhop.print_methods()
+	pyhop.print_methods()
 
 	# Hint: verbose output can take a long time even if the solution is correct; 
 	# try verbose=1 if it is taking too long
