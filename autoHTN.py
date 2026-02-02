@@ -193,3 +193,55 @@ if __name__ == '__main__':
 	# try verbose=1 if it is taking too long
 	pyhop.pyhop(state, goals, verbose=1)
 	# pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1),('have_enough', 'agent', 'rail', 20)], verbose=3)
+if __name__ == '__main__':
+    import sys
+    
+    rules_filename = 'crafting.json'
+    with open(rules_filename) as f:
+        data = json.load(f)
+
+    declare_operators(data)
+    declare_methods(data)
+    add_heuristic(data, 'agent')
+
+    test_cases = [
+        {
+            "name": "a. Given {'plank': 1}, achieve {'plank': 1} [time <= 0]",
+            "initial": {'plank': 1},
+            "goal": {'plank': 1},
+            "time": 0
+        },
+        {
+            "name": "b. Given {}, achieve {'plank': 1} [time <= 300]",
+            "initial": {},
+            "goal": {'plank': 1},
+            "time": 300
+        },
+        {
+            "name": "c. Given {'plank': 3, 'stick': 2}, achieve {'wooden_pickaxe': 1} [time <= 10]",
+            "initial": {'plank': 3, 'stick': 2},
+            "goal": {'wooden_pickaxe': 1},
+            "time": 10
+        },
+        {
+            "name": "d. Given {}, achieve {'iron_pickaxe': 1} [time <= 100]",
+            "initial": {},
+            "goal": {'iron_pickaxe': 1},
+            "time": 100
+        },
+        {
+            "name": "e. Given {}, achieve {'cart': 1, 'rail': 10} [time <= 175]",
+            "initial": {},
+            "goal": {'cart': 1, 'rail': 10},
+            "time": 175
+        },
+        {
+            "name": "f. Given {}, achieve {'cart': 1, 'rail': 20} [time <= 250]",
+            "initial": {},
+            "goal": {'cart': 1, 'rail': 20},
+            "time": 250
+        }
+    ]
+
+    for case in test_cases:
+        solve_test_case(data, case['initial'], case['goal'], case['time'], case['name'])
