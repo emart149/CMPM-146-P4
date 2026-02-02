@@ -170,30 +170,6 @@ def set_up_goals(data, ID):
 	return goals
 
 if __name__ == '__main__':
-	import sys
-	rules_filename = 'crafting.json'
-	if len(sys.argv) > 1:
-		rules_filename = sys.argv[1]
-
-	with open(rules_filename) as f:
-		data = json.load(f)
-
-	state = set_up_state(data, 'agent')
-	goals = set_up_goals(data, 'agent')
-
-	declare_operators(data)
-	declare_methods(data)
-	add_heuristic(data, 'agent')
-	define_ordering(data, 'agent')
-
-	# pyhop.print_operators()
-	pyhop.print_methods()
-
-	# Hint: verbose output can take a long time even if the solution is correct; 
-	# try verbose=1 if it is taking too long
-	pyhop.pyhop(state, goals, verbose=1)
-	# pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1),('have_enough', 'agent', 'rail', 20)], verbose=3)
-if __name__ == '__main__':
     import sys
     
     rules_filename = 'crafting.json'
@@ -203,6 +179,7 @@ if __name__ == '__main__':
     declare_operators(data)
     declare_methods(data)
     add_heuristic(data, 'agent')
+    define_ordering(data, 'agent')
 
     test_cases = [
         {
@@ -245,3 +222,19 @@ if __name__ == '__main__':
 
     for case in test_cases:
         solve_test_case(data, case['initial'], case['goal'], case['time'], case['name'])
+	#if len(sys.argv) > 1:
+	#
+ 	#rules_filename = sys.argv[1]
+
+	#with open(rules_filename) as f:
+	#	data = json.load(f)
+
+	#state = set_up_state(data, 'agent')
+	#goals = set_up_goals(data, 'agent')
+    # pyhop.print_operators()
+	#pyhop.print_methods()
+
+	# Hint: verbose output can take a long time even if the solution is correct; 
+	# try verbose=1 if it is taking too long
+	#pyhop.pyhop(state, goals, verbose=1)
+	# pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1),('have_enough', 'agent', 'rail', 20)], verbose=3)
