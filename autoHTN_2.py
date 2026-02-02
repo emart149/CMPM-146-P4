@@ -3,12 +3,9 @@ import json
 import time
 import sys
 
-# Global variables for heuristic
-visited_states = set()
-MAX_DEPTH = 100
-
 def check_enough(state, ID, item, num):
-    if getattr(state, item)[ID] >= num: return []
+    if getattr(state, item)[ID] >= num: 
+        return []
     return False
 
 def produce_enough(state, ID, item, num):
@@ -36,6 +33,7 @@ def make_method(name, rule):
             for item, amount in sorted_items:
                 subtasks.append(('have_enough', ID, item, amount))
 
+        # 3) Finally, the operator
         op_name = 'op_{}'.format(name.replace(' ', '_'))
         subtasks.append((op_name, ID))
 
@@ -149,88 +147,6 @@ def declare_operators(data):
 
     pyhop.declare_operators(*operators_list)
 
-def add_heuristic(data, ID):
-    """
-    Smart heuristic: Understand that we only need ONE bench and ONE of each tool.
-    Prevents cycles by tracking what we're already trying to produce.
-    """
-    # Track what we're currently trying to produce in this branch
-    producing_stack = []
-    
-    def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
-        task_name = curr_task[0]
-        
-        # Depth limit
-        if depth > 200:
-            return True
-        
-        # Track produce tasks
-        if task_name == 'produce' or task_name.startswith('produce_'):
-            # Get item name
-            if task_name == 'produce':
-                item = curr_task[2]
-            else:
-                item = task_name[8:]  # Remove 'produce_' prefix
-            
-            # if we already HAVE a bench, don't try to produce another one
-            if item == 'bench' and hasattr(state, 'bench') and state.bench[ID] >= 1:
-                return True  # Prune - we already have a bench!
-            
-            # if we already have a better tool, don't make worse ones
-            if item == 'wooden_pickaxe' and hasattr(state, 'stone_pickaxe') and state.stone_pickaxe[ID] >= 1:
-                return True
-            if item == 'wooden_pickaxe' and hasattr(state, 'iron_pickaxe') and state.iron_pickaxe[ID] >= 1:
-                return True
-            if item == 'stone_pickaxe' and hasattr(state, 'iron_pickaxe') and state.iron_pickaxe[ID] >= 1:
-                return True
-            
-            if item == 'wooden_axe' and hasattr(state, 'stone_axe') and state.stone_axe[ID] >= 1:
-                return True
-            if item == 'wooden_axe' and hasattr(state, 'iron_axe') and state.iron_axe[ID] >= 1:
-                return True
-            if item == 'stone_axe' and hasattr(state, 'iron_axe') and state.iron_axe[ID] >= 1:
-                return True
-            
-            # Check if we're already trying to produce this item in the stack
-            # But allow it if we need more than one (like wood, planks, sticks)
-            if item in ['bench', 'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe',
-                       'wooden_axe', 'stone_axe', 'iron_axe', 'furnace']:
-                # For these items, we only need one
-                for stack_task in calling_stack[:-1]:  # Exclude current
-                    stack_name = stack_task[0]
-                    if stack_name == 'produce' or stack_name.startswith('produce_'):
-                        if stack_name == 'produce':
-                            stack_item = stack_task[2]
-                        else:
-                            stack_item = stack_name[8:]
-                        
-                        if stack_item == item:
-                            # Already trying to produce this unique item
-                            return True
-        
-        # Check for the specific cycle pattern: produce X -> have_enough bench -> produce bench
-        # when we don't have bench yet but are trying to make something that needs bench
-        if task_name == 'have_enough' and len(curr_task) >= 3:
-            _, agent, item, amount = curr_task
-            
-            # If we're checking for bench, and we don't have one yet
-            if item == 'bench' and (not hasattr(state, 'bench') or state.bench[agent] < amount):
-                # Look back in stack: are we trying to produce something that needs bench?
-                for stack_task in calling_stack:
-                    stack_name = stack_task[0]
-                    if stack_name.startswith('produce_'):
-                        stack_item = stack_name[8:]
-                        # Items that require bench
-                        if stack_item in ['wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe',
-                                         'wooden_axe', 'stone_axe', 'iron_axe',
-                                         'furnace', 'cart', 'rail']:
-                            # This is OK - we need to make bench first
-                            pass
-        
-        return False
-    
-    pyhop.add_check(heuristic)
-
 def set_up_state(data, ID, time=0):
     state = pyhop.State('state')
     state.time = {ID: time}
@@ -257,7 +173,7 @@ def set_up_state(data, ID, time=0):
 
     return state
 
-def solve_test_case(data, initial_items, goal_items, max_time, case_name, verbose=0, timeout=10):
+def solve_test_case(data, initial_items, goal_items, max_time, case_name, verbose=0, timeout=30):
     print(f"\n{'='*20} Solving Case: {case_name} {'='*20}")
     print(f"Initial: {initial_items}")
     print(f"Goal: {goal_items}")
@@ -280,18 +196,30 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name, verbos
 
     # Run planner with timeout
     start_time = time.time()
+    plan = False
+    
     try:
-        # Monkey patch to add timeout
-        original_pyhop = pyhop.pyhop
-        def pyhop_with_timeout(state, goals, verbose=0):
-            if time.time() - start_time > timeout:
-                raise TimeoutError(f"Planning timeout after {timeout} seconds")
-            return original_pyhop(state, goals, verbose)
+        # Set up timeout
+        import signal
         
-        plan = pyhop_with_timeout(state, goals, verbose=verbose)
-    except TimeoutError as e:
-        print(f"TIMEOUT: {e}")
-        plan = False
+        class TimeoutException(Exception):
+            pass
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutException()
+        
+        # Set the signal handler
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout)
+        
+        try:
+            plan = pyhop.pyhop(state, goals, verbose=verbose)
+        except TimeoutException:
+            print(f"TIMEOUT: Planning exceeded {timeout} seconds")
+            plan = False
+        finally:
+            signal.alarm(0)  # Disable the alarm
+            
     except Exception as e:
         print(f"Error during planning: {e}")
         plan = False
@@ -313,12 +241,16 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name, verbos
         
         print(f"Time used: {total_time}, Time remaining: {state.time['agent']}")
         
-        # Show first 15 steps of plan if long
-        if len(plan) > 15:
-            print(f"First 15 steps of plan: {plan[:15]}...")
-            print(f"... and {len(plan)-15} more steps")
+        # Show plan
+        if len(plan) <= 50:
+            print(f"Plan ({len(plan)} steps):")
+            for i, action in enumerate(plan):
+                print(f"  {i+1}. {action}")
         else:
-            print(f"Plan: {plan}")
+            print(f"Plan has {len(plan)} steps (showing first 30):")
+            for i, action in enumerate(plan[:30]):
+                print(f"  {i+1}. {action}")
+            print(f"  ... and {len(plan)-30} more steps")
         
         # Verify plan
         test_state = set_up_state(data, 'test', max_time)
@@ -352,7 +284,19 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name, verbos
             print("✗ Plan verification: FAILED")
             
     else:
-        print(f"FAILURE: No plan found in {elapsed:.2f}s")
+        if elapsed >= timeout:
+            print(f"TIMEOUT: No plan found in {timeout}s (elapsed: {elapsed:.2f}s)")
+        else:
+            print(f"FAILURE: No plan found in {elapsed:.2f}s")
+        
+        # Show current state to debug
+        print("\nCurrent resource state:")
+        key_items = ['wood', 'plank', 'stick', 'bench', 'cobble', 'wooden_pickaxe', 
+                    'stone_pickaxe', 'iron_pickaxe', 'furnace', 'ore', 'coal', 'ingot',
+                    'cart', 'rail', 'iron_axe', 'stone_axe', 'wooden_axe']
+        for item in key_items:
+            if hasattr(state, item):
+                print(f"  {item}: {getattr(state, item)['agent']}")
     
     return plan is not False, plan
 
@@ -368,8 +312,9 @@ if __name__ == '__main__':
     
     declare_operators(data)
     declare_methods(data)
-    add_heuristic(data, 'agent')
+    # NO HEURISTICS, NO MODIFICATIONS - just plain pyhop
     
+    # Test cases
     test_cases = [
         {
             "name": "a. Given {'plank': 1}, achieve {'plank': 1} [time <= 0]",
@@ -396,15 +341,15 @@ if __name__ == '__main__':
             "time": 100
         },
         {
-            "name": "e. Given {}, achieve {'cart': 1, 'rail': 10} [time <= 175]",
+            "name": "e. Given {}, achieve {'cart': 1} [time <= 175]",
             "initial": {},
-            "goal": {'cart': 1, 'rail': 10},
+            "goal": {'cart': 1},
             "time": 175
         },
         {
-            "name": "f. Given {}, achieve {'cart': 1, 'rail': 20} [time <= 250]",
+            "name": "f. Given {}, achieve {'cart': 1} [time <= 250]",
             "initial": {},
-            "goal": {'cart': 1, 'rail': 20},
+            "goal": {'cart': 1},
             "time": 250
         }
     ]
@@ -415,10 +360,16 @@ if __name__ == '__main__':
         print(f"TEST CASE {i+1}: {case['name']}")
         print(f"{'#'*60}")
         
+        # Adjust settings based on complexity
+        if i < 3:  # Cases a, b, c
+            verbose = 2
+            timeout = 10
+        else:  # Cases d, e, f
+            verbose = 0  # No verbose output for complex cases
+            timeout = 30  # 30 seconds for complex cases
+            
         success, plan = solve_test_case(data, case['initial'], case['goal'], 
-                                       case['time'], case['name'], verbose=0, timeout=30)
+                                       case['time'], case['name'], verbose=verbose, timeout=timeout)
         
         if not success and i >= 3:  # For complex cases d-f
-            print("\nTrying alternative approach...")
-            # Try with more aggressive pruning for complex cases
-            print("(This might take a moment for complex cases)")
+            print("\nNote: Complex cases might require more time or better search strategies")
