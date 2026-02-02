@@ -168,6 +168,30 @@ def set_up_goals(data, ID):
 		goals.append(('have_enough', ID, item, num))
 
 	return goals
+def solve_test_case(data, initial_items, goal_items, max_time, case_name):
+    print(f"\n{'='*20} Solving Case: {case_name} {'='*20}")
+    print(f"Initial: {initial_items}")
+    print(f"Goal: {goal_items}")
+    print(f"Time Limit: {max_time}")
+
+    state = set_up_state(data, 'agent', max_time)
+    
+    # Apply specific initial items for this test case
+    for item, num in initial_items.items():
+        setattr(state, item, {'agent': num})
+
+    goals = []
+    for item, num in goal_items.items():
+        goals.append(('have_enough', 'agent', item, num))
+
+    # verbose=1 prints the problem and solution
+    plan = pyhop.pyhop(state, goals, verbose=1)
+    
+    # FIX: Check "is not False" because an empty plan [] is a valid success (False is failure)
+    if plan is not False:
+        print(f"SUCCESS: Plan found with {len(plan)} steps.")
+    else:
+        print("FAILURE: No plan found.")
 
 if __name__ == '__main__':
     import sys
