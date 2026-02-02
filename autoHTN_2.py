@@ -8,8 +8,7 @@ visited_states = set()
 MAX_DEPTH = 100
 
 def check_enough(state, ID, item, num):
-    if getattr(state, item)[ID] >= num: 
-        return []
+    if getattr(state, item)[ID] >= num: return []
     return False
 
 def produce_enough(state, ID, item, num):
@@ -37,7 +36,6 @@ def make_method(name, rule):
             for item, amount in sorted_items:
                 subtasks.append(('have_enough', ID, item, amount))
 
-        # 3) Finally, the operator
         op_name = 'op_{}'.format(name.replace(' ', '_'))
         subtasks.append((op_name, ID))
 
@@ -174,11 +172,11 @@ def add_heuristic(data, ID):
             else:
                 item = task_name[8:]  # Remove 'produce_' prefix
             
-            # CRITICAL: If we already HAVE a bench, don't try to produce another one
+            # if we already HAVE a bench, don't try to produce another one
             if item == 'bench' and hasattr(state, 'bench') and state.bench[ID] >= 1:
                 return True  # Prune - we already have a bench!
             
-            # Similarly for tools: if we already have a better tool, don't make worse ones
+            # if we already have a better tool, don't make worse ones
             if item == 'wooden_pickaxe' and hasattr(state, 'stone_pickaxe') and state.stone_pickaxe[ID] >= 1:
                 return True
             if item == 'wooden_pickaxe' and hasattr(state, 'iron_pickaxe') and state.iron_pickaxe[ID] >= 1:
