@@ -147,27 +147,37 @@ def define_ordering(data, ID):
 	
 	pyhop.define_ordering(reorder_methods)
 
-def set_up_state(data, ID):
-	state = pyhop.State('state')
-	setattr(state, 'time', {ID: data['Problem']['Time']})
+def set_up_state(data, ID, time=0):
+    state = pyhop.State('state')
+    state.time = {ID: time}
 
-	for item in data['Items']:
-		setattr(state, item, {ID: 0})
+    for item in data['Items']:
+        setattr(state, item, {ID: 0})
 
-	for item in data['Tools']:
-		setattr(state, item, {ID: 0})
+    for item in data['Tools']:
+        setattr(state, item, {ID: 0})
 
-	for item, num in data['Problem']['Initial'].items():
-		setattr(state, item, {ID: num})
+    # Fix: Check for 'Problem' key to handle nested JSON structure
+    problem_data = data.get('Problem', data) # Fallback to data if 'Problem' key missing
+    initial_data = problem_data.get('Initial', {})
 
-	return state
+    for item, num in initial_data.items():
+        setattr(state, item, {ID: num})
+
+    return state
 
 def set_up_goals(data, ID):
-	goals = []
-	for item, num in data['Problem']['Goal'].items():
-		goals.append(('have_enough', ID, item, num))
+    goals = []
+    
+    # Fix: Check for 'Problem' key here as well
+    problem_data = data.get('Problem', data)
+    goal_data = problem_data.get('Goal', {})
 
-	return goals
+    for item, num in goal_data.items():
+        goals.append(('have_enough', ID, item, num))
+
+    return goals
+
 def solve_test_case(data, initial_items, goal_items, max_time, case_name):
     print(f"\n{'='*20} Solving Case: {case_name} {'='*20}")
     print(f"Initial: {initial_items}")
@@ -175,6 +185,7 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name):
     print(f"Time Limit: {max_time}")
 
     state = set_up_state(data, 'agent', max_time)
+
     
     # Apply specific initial items for this test case
     for item, num in initial_items.items():
