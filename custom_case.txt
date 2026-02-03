@@ -1,0 +1,32 @@
+# Our chosen problem
+{
+    "name": "g. Given {}, achieve {'cart': 1, 'rail': 20} [time <= 250]",
+    "initial": {},
+    "goal": {'cart': 3, 'rail': 40},
+    "time": 450
+}
+
+SUCCESS: Plan found with 128 steps.
+Time cost: 418  |  Remainging time: 32
+IRL runtime: 0.0109 seconds
+OPERATORS: op_iron_axe_for_wood, op_punch_for_wood, op_craft_wooden_pickaxe_at_bench, op_craft_stone_pickaxe_at_bench, op_wooden_pickaxe_for_coal, op_iron_pickaxe_for_ore, op_wooden_axe_for_wood, op_craft_plank, op_craft_stick, op_craft_rail_at_bench, op_craft_cart_at_bench, op_iron_pickaxe_for_cobble, op_stone_axe_for_wood, op_craft_iron_pickaxe_at_bench, op_craft_furnace_at_bench, op_stone_pickaxe_for_ore, op_craft_iron_axe_at_bench, op_stone_pickaxe_for_coal, op_craft_wooden_axe_at_bench, op_stone_pickaxe_for_cobble, op_wooden_pickaxe_for_cobble, op_iron_pickaxe_for_coal, op_craft_bench, op_craft_stone_axe_at_bench, op_smelt_ore_in_furnace
+TASK:         METHODS:
+have_enough   check_enough, produce_enough
+produce       produce
+produce_wood  method
+produce_wooden_pickaxemethod_craft_wooden_pickaxe_at_bench
+produce_stone_pickaxemethod_craft_stone_pickaxe_at_bench
+produce_coal  method
+produce_ore   method
+produce_plank method_craft_plank
+produce_stick method_craft_stick
+produce_rail  method_craft_rail_at_bench
+produce_cart  method_craft_cart_at_bench
+produce_cobblemethod
+produce_iron_pickaxemethod_craft_iron_pickaxe_at_bench
+produce_furnacemethod_craft_furnace_at_bench
+produce_iron_axemethod_craft_iron_axe_at_bench
+produce_wooden_axemethod_craft_wooden_axe_at_bench
+produce_bench method_craft_bench
+produce_stone_axemethod_craft_stone_axe_at_bench
+produce_ingot method_smelt_ore_in_furnace

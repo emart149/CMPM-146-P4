@@ -1,5 +1,6 @@
 import pyhop
 import json
+import time
 
 def check_enough(state, ID, item, num):
     if getattr(state, item)[ID] >= num:
@@ -295,16 +296,28 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name):
     for item, num in initial_items.items():
         setattr(state, item, {'agent': num})
 
-    goals = []
-    for item, num in goal_items.items():
-        goals.append(('have_enough', 'agent', item, num))
+    goals = [('have_enough', 'agent', item, num) for item, num in goal_items.items()]
 
+    op_time = {}
+    for recipe_name, rule in data['Recipes'].items():
+        op_name = "op_" + recipe_name.replace(' ', '_')
+        op_time[op_name] = rule.get('Time', 0)
+
+    t0 = time.perf_counter()
     plan = pyhop.pyhop(state, goals, verbose=3)
-    
+    t1 = time.perf_counter()
+    runtime_sec = t1 - t0
+
     if plan is not False:
+        total_time_used = sum(op_time.get(action[0], 0) for action in plan)
+        time_remaining = max_time - total_time_used
+
         print(f"SUCCESS: Plan found with {len(plan)} steps.")
+        print(f"Time cost: {total_time_used}  |  Remainging time: {time_remaining}")
+        print(f"IRL runtime: {runtime_sec:.4f} seconds")
     else:
         print("FAILURE: No plan found.")
+        print(f"IRL runtime: {runtime_sec:.4f} seconds")
 
 if __name__ == '__main__':
     rules_filename = 'crafting.json'
@@ -352,6 +365,12 @@ if __name__ == '__main__':
             "initial": {},
             "goal": {'cart': 1, 'rail': 20},
             "time": 250
+        },
+        {
+            "name": "g. Given {}, achieve {'cart': 1, 'rail': 20} [time <= 250]",
+            "initial": {},
+            "goal": {'cart': 3, 'rail': 40},
+            "time": 450
         }
     ]
 
