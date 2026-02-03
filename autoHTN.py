@@ -366,7 +366,7 @@ if __name__ == '__main__':
             "time": 250
         },
         {
-            "name": "custom. Given {}, achieve {'cart': 3, 'rail': 48} [time <= 250]",
+            "name": "custom. Given {}, achieve {'cart': 3, 'rail': 48} [time <= 450]",
             "initial": {},
             "goal": {'cart': 3, 'rail': 48},
             "time": 450
