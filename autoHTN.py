@@ -1,151 +1,271 @@
 import pyhop
 import json
+import time
 
 def check_enough(state, ID, item, num):
-	if getattr(state,item)[ID] >= num: return []
-	return False
+    if getattr(state, item)[ID] >= num:
+        return []
+
+    # Forces an upgrade to a better tool if we need a lot of resources
+    if item in ('cobble', 'coal') and num >= 8 and getattr(state, 'stone_pickaxe')[ID] < 1:
+        return [('have_enough', ID, 'stone_pickaxe', 1), ('produce', ID, item), ('have_enough', ID, item, num)]
+
+    return [('produce_enough', ID, item, num)]
 
 def produce_enough(state, ID, item, num):
-	return [('produce', ID, item), ('have_enough', ID, item, num)]
+    return [('produce', ID, item), ('have_enough', ID, item, num)]
 
 pyhop.declare_methods('have_enough', check_enough, produce_enough)
 
 def produce(state, ID, item):
-	return [('produce_{}'.format(item), ID)]
+    return [('produce_{}'.format(item), ID)]
 
 pyhop.declare_methods('produce', produce)
 
-def make_method(name, rule):
-	def method(state, ID):
-		# your code here
-		subtasks = []
+def tool_select(tool_checks, fallback):
+    """
+    Back to what we talked about last night with the tools. Cart was failing because it tried to use wooden tools
+    when it really needed stone or better. It kept on retrying with wooden tools and failing. This is why the time was going backwards.
+    tool_checks: List of tuples (tool_name, op_name)
+    fallback: Function that returns the default task list if no tool is found
+    """
+    def method(state, ID):
+        # Check every tool in the priority list
+        for tool, op in tool_checks:
+            if getattr(state, tool)[ID] >= 1:
+                return [(op, ID)]
+        # If we have none, do the fallback
+        return fallback(ID)
+    return method
 
-		if 'Requires' in rule:
-			for item, amount in rule['Requires'].items():
-				subtasks.append(('have enough', ID, item, amount))
+# 1. Define tools and gathering wood.
+wood_tools = [
+    ('iron_axe', 'op_iron_axe_for_wood'),
+    ('stone_axe', 'op_stone_axe_for_wood'),
+    ('wooden_axe', 'op_wooden_axe_for_wood')
+]
+# Wood falls back to punching
+m_wood = tool_select(wood_tools, lambda ID: [('op_punch_for_wood', ID)])
 
-		if 'Consumes' in rule:
-			for item, amount in rule['Consumes'].items():
-				subtasks.append(('have enough', ID, item, amount))	
+# 2. Define picks for cobble/coal (same tools, different ops)
+# Note: These fall back to CRAFTING a wooden pickaxe, not punching
+def pick_fallback(op_name):
+    return lambda ID: [('have_enough', ID, 'wooden_pickaxe', 1), (op_name, ID)]
 
-		op_name = 'op_{}'.format(name.replace(' ', '_'))
-		subtasks.append((op_name, ID)) 
+cobble_tools = [
+    ('iron_pickaxe', 'op_iron_pickaxe_for_cobble'),
+    ('stone_pickaxe', 'op_stone_pickaxe_for_cobble'),
+    ('wooden_pickaxe', 'op_wooden_pickaxe_for_cobble')
+]
+m_cobble = tool_select(cobble_tools, pick_fallback('op_wooden_pickaxe_for_cobble'))
+
+coal_tools = [
+    ('iron_pickaxe', 'op_iron_pickaxe_for_coal'),
+    ('stone_pickaxe', 'op_stone_pickaxe_for_coal'),
+    ('wooden_pickaxe', 'op_wooden_pickaxe_for_coal')
+]
+m_coal = tool_select(coal_tools, pick_fallback('op_wooden_pickaxe_for_coal'))
+
+# 3. Ore (requires stone))
+ore_tools = [
+    ('iron_pickaxe', 'op_iron_pickaxe_for_ore'),
+    ('stone_pickaxe', 'op_stone_pickaxe_for_ore')
+]
+# Ore falls back to stone pickaxe
+m_ore = tool_select(ore_tools, lambda ID: [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)])
 
 
-		return subtasks
+def set_order(consumes, depth_stack):
+    items = list(consumes.keys())
+    if len(items) <= 1:
+        return items
 
-	method.__name__ = 'produce_{}'.format(name.replace(' ', '_'))
-	return method
+    item_set = set(items)
+
+    # adjacency: x -> y if x depends on y and both are in the consumes set
+    adj = {
+        x: [y for y in depth_stack.get(x, set()) if y in item_set and y != x]
+        for x in items
+    }
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {x: WHITE for x in items}
+    out = []
+
+    def dfs(x):
+        color[x] = GRAY
+        for y in adj[x]:
+            if color[y] == GRAY:
+                return False  
+            if color[y] == WHITE and not dfs(y):
+                return False
+        color[x] = BLACK
+        out.append(x)
+        return True
+
+    for x in items:
+        if color[x] == WHITE:
+            if not dfs(x):
+                return items  
+
+    out.reverse()
+    return out
+
+def make_method(name, rule, tools=None, consumes_order=None):
+    prod = rule.get("Produces", {})
+    req  = rule.get("Requires", {})
+    cons = rule.get("Consumes", {})
+    t_c  = rule.get("Time", 0)
+
+    if consumes_order is None:
+        consumes_order = list(cons.keys())
+
+    def tier(tool_name):
+        if tool_name.startswith("wooden_"): return 1
+        if tool_name.startswith("stone_"):  return 2
+        if tool_name.startswith("iron_"):   return 3
+        if tool_name in ("bench", "furnace"): return 0
+        return 0
+
+    required_tool_tier = 0
+    for item in req:
+        if item in (tools or set()):
+            required_tool_tier = max(required_tool_tier, tier(item))
+
+    def method(state, ID):
+        subtasks = []
+
+        for item, amount in req.items():
+            subtasks.append(('have_enough', ID, item, amount))
+
+        for item in consumes_order:
+            subtasks.append(('have_enough', ID, item, cons[item]))
+
+        op_name = 'op_{}'.format(name.replace(' ', '_'))
+        subtasks.append((op_name, ID))
+        return subtasks
+
+    method.__name__ = 'method_{}'.format(name.replace(' ', '_'))
+
+    method._meta = {
+        "tier": required_tool_tier,
+        "time": t_c,
+        "n_subtasks": 1 + len(req) + len(cons),
+        "produces": list(prod.keys())
+    }
+    return method
 
 def declare_methods(data):
-	# some recipes are faster than others for the same product even though they might require extra tools
-	# sort the recipes so that faster recipes go first
+    tools = set(data.get("Tools", [])) | {"bench", "furnace"}
 
-	# your code here
-	# hint: call make_method, then declare the method to pyhop using pyhop.declare_methods('foo', m1, m2, ..., mk)	
-	rec_prod = {}
+    dep_map = {}
+    for rule in data['Recipes'].values():
+        for p in rule.get('Produces', {}):
+            dep_map.setdefault(p, set()).update(rule.get("Consumes", {}).keys())
 
-	for rec_name, rule in data['Recipes'].items():
-		for product in rule['Produces']:
-			if product not in rec_prod:
-				rec_prod[product] = []
-		
-			rec_prod[product].append({
-				'name': rec_name,
-				'rule': rule,
-				'time': rule.get('Time', 1)
-			})
+    rec_prod = {}
 
-	for product, rec_list in rec_prod.items():
-		rec_list.sort(key=lambda x: x['time'])
+    for rec_name, rule in data['Recipes'].items():
+        for product in rule['Produces']:
+            if product not in rec_prod:
+                rec_prod[product] = []
 
-		method_list = []
-		for rec_info in rec_list:
-			method_func = make_method(rec_info['name'], rec_info['rule'])
-			method_list.append(method_func)
+            cons = rule.get("Consumes", {})
+            cons_order = set_order(cons, dep_map)
 
-		pyhop.declare_methods('produce_{}'.format(product), *method_list)
+            # Forces ingot before stick if both in recipe
+            if 'ingot' in cons and 'stick' in cons:
+                cons_order = (
+                    ['ingot']
+                    + [x for x in cons_order if x not in ('ingot', 'stick')]
+                    + ['stick']
+                )
+
+            mth = make_method(rec_name, rule, tools=tools, consumes_order=cons_order)
+            rec_prod[product].append(mth)
+
+    for product, method_list in rec_prod.items():
+        method_list.sort(key=lambda m: (m._meta["tier"], m._meta["time"], m._meta["n_subtasks"]))
+        pyhop.declare_methods('produce_{}'.format(product), *method_list)
+
+    pyhop.declare_methods("produce_wood", m_wood)
+    pyhop.declare_methods("produce_cobble", m_cobble)
+    pyhop.declare_methods("produce_coal", m_coal)
+    pyhop.declare_methods("produce_ore", m_ore)
 
 def make_operator(rule):
-	def operator(state, ID):
-		"""
-		I think that rule is the input of which action we are making an operator for at the current moment
-		"""
-		has_prereqs= True
-		
-		for requirement in rule['Requires']:
-			requirement_cur_value = getattr(state, requirement)[ID]
-			if requirement_cur_value < rule['Requires'][requirement]:
-				has_prereqs = False
+    prod = rule.get("Produces", {})
+    req = rule.get("Requires", {})
+    cons = rule.get("Consumes", {})
+    t_c = rule.get("Time", 0)
 
-		for item in rule['Consumes']:
-			item_cur_value = getattr(state, item)[ID]
-			if item_cur_value < rule['Consumes'][item]:
-				has_prereqs = False
+    def operator(state, ID):
+        if state.time[ID] < t_c:
+            return False
 
-		if state.time[ID] < rule['Time']:
-			has_prereqs = False
+        for item, amt in req.items():
+            if getattr(state, item)[ID] < amt:
+                return False
 
-		if has_prereqs:
-			for product in rule['Produces']:
-				product_cur_value = getattr(state, product)[ID]
-				setattr(state, product , {ID: product_cur_value + rule['Produces'][product]})
-			
-			for item in rule['Consumes']:
-				item_cur_value = getattr(state, item)[ID]
-				setattr(state, item , {ID: item_cur_value - rule['Consumes'][item]})
+        for item, amt in cons.items():
+            if getattr(state, item)[ID] < amt:
+                return False
 
-			state.time[ID] -= rule['Time']
-			return state
-		else:
-			return False
-		# your code here
-	return operator
+        state.time[ID] -= t_c
+        
+        for item, amt in cons.items():
+            curr = getattr(state, item)[ID]
+            setattr(state, item, {ID: curr - amt})
+
+        for item, amt in prod.items():
+            curr = getattr(state, item)[ID]
+            setattr(state, item, {ID: curr + amt})
+
+        return state
+
+    return operator
 
 def declare_operators(data):
-	"""
-	I think that this function iterates through each recipe in the jason and calls make_operator for each one
-	For instance it'll do make_operator(iron_axe_for_wood), then do make_oprator(punch_for_wood)
-	"""
-	
-	operators_list = []
+    operators_list = []
+    for recipe_name, rule in data['Recipes'].items():
+        new_operator = make_operator(rule)
+        new_operator.__name__ = "op_" + recipe_name.replace(' ', '_')
+        operators_list.append(new_operator)
 
-	for recipe_name in data['Recipes']:
-		new_operator = make_operator(data['Recipes'][recipe_name])
-		new_operator.__name__ = "op_" + recipe_name
-		#print(f"{action}")
-		operators_list.append(new_operator)
-
-	pyhop.declare_operators(*operators_list)
-	pyhop.print_operators()
-	# your code here
-	# hint: call make_operator, then declare the operator to pyhop using pyhop.declare_operators(o1, o2, ..., ok)
+    pyhop.declare_operators(*operators_list)
 
 def add_heuristic(data, ID):
-	# prune search branch if heuristic() returns True
-	# do not change parameters to heuristic(), but can add more heuristic functions with the same parameters: 
-	# e.g. def heuristic2(...); pyhop.add_check(heuristic2)
-	def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
-		# your code here
-		#note: when testing this function use print() and  python autoHTN.py > out.txt to easily test results
-		"""
-		Preventing Infinite Loops Options:
-		1: Implemented in this function very similar to if statements in manualHTN produce() function which check if certain items have already been made
-		2: implemented within make_methods() and similar to reordering manualHTN methods
-		3: implemented within declare_methods() and similar to reordering manualHTN tasks
-		4: Bahar said really difficult, so we prolly shouldn't waste time on it 
-		"""
-		return False # if True, prune this branch
+    # prune search branch if heuristic() returns True
+    # do not change parameters to heuristic(), but can add more heuristic functions with the same parameters:
+    # e.g. def heuristic2
+    tools = set(data.get("Tools", [])) | {"bench", "furnace"}
 
-	pyhop.add_check(heuristic)
+    def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
+        if depth > 1000:
+            return True
 
-def define_ordering(data, ID):
-	# if needed, use the function below to return a different ordering for the methods
-	# note that this should always return the same methods, in a new order, and should not add/remove any new ones
-	def reorder_methods(state, curr_task, tasks, plan, depth, calling_stack, methods):
-		return methods
-	
-	pyhop.define_ordering(reorder_methods)
+        task_name = curr_task[0]
+        
+        if task_name.startswith('produce_'):
+            product = task_name.replace('produce_', '')
+            
+            if product in tools and getattr(state, product)[ID] >= 1:
+                return True
+
+            if product in tools:
+                for upstream_task in calling_stack:
+                     if upstream_task[0] == task_name:
+                         return True
+                         
+        return False
+
+    pyhop.add_check(heuristic)
+
+# Unused
+# def define_ordering(data, ID):
+#     def reorder_methods(state, curr_task, tasks, plan, depth, calling_stack, methods):
+#         return methods
+#     pyhop.define_ordering(reorder_methods)
 
 def set_up_state(data, ID, time=0):
     state = pyhop.State('state')
@@ -157,26 +277,13 @@ def set_up_state(data, ID, time=0):
     for item in data['Tools']:
         setattr(state, item, {ID: 0})
 
-    # Fix: Check for 'Problem' key to handle nested JSON structure
-    problem_data = data.get('Problem', data) # Fallback to data if 'Problem' key missing
+    problem_data = data.get('Problem', data)
     initial_data = problem_data.get('Initial', {})
 
     for item, num in initial_data.items():
         setattr(state, item, {ID: num})
 
     return state
-
-def set_up_goals(data, ID):
-    goals = []
-    
-    # Fix: Check for 'Problem' key here as well
-    problem_data = data.get('Problem', data)
-    goal_data = problem_data.get('Goal', {})
-
-    for item, num in goal_data.items():
-        goals.append(('have_enough', ID, item, num))
-
-    return goals
 
 def solve_test_case(data, initial_items, goal_items, max_time, case_name):
     print(f"\n{'='*20} Solving Case: {case_name} {'='*20}")
@@ -186,27 +293,33 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name):
 
     state = set_up_state(data, 'agent', max_time)
 
-    
-    # Apply specific initial items for this test case
     for item, num in initial_items.items():
         setattr(state, item, {'agent': num})
 
-    goals = []
-    for item, num in goal_items.items():
-        goals.append(('have_enough', 'agent', item, num))
+    goals = [('have_enough', 'agent', item, num) for item, num in goal_items.items()]
 
-    # verbose=1 prints the problem and solution
+    op_time = {}
+    for recipe_name, rule in data['Recipes'].items():
+        op_name = "op_" + recipe_name.replace(' ', '_')
+        op_time[op_name] = rule.get('Time', 0)
+
+    t0 = time.perf_counter()
     plan = pyhop.pyhop(state, goals, verbose=1)
-    
-    # FIX: Check "is not False" because an empty plan [] is a valid success (False is failure)
+    t1 = time.perf_counter()
+    runtime_sec = t1 - t0
+
     if plan is not False:
+        total_time_used = sum(op_time.get(action[0], 0) for action in plan)
+        time_remaining = max_time - total_time_used
+
         print(f"SUCCESS: Plan found with {len(plan)} steps.")
+        print(f"Time cost: {total_time_used}  |  Remainging time: {time_remaining}")
+        print(f"IRL runtime: {runtime_sec:.4f} seconds")
     else:
         print("FAILURE: No plan found.")
+        print(f"IRL runtime: {runtime_sec:.4f} seconds")
 
 if __name__ == '__main__':
-    import sys
-    
     rules_filename = 'crafting.json'
     with open(rules_filename) as f:
         data = json.load(f)
@@ -214,7 +327,7 @@ if __name__ == '__main__':
     declare_operators(data)
     declare_methods(data)
     add_heuristic(data, 'agent')
-    define_ordering(data, 'agent')
+    # define_ordering(data, 'agent')
 
     test_cases = [
         {
@@ -252,24 +365,16 @@ if __name__ == '__main__':
             "initial": {},
             "goal": {'cart': 1, 'rail': 20},
             "time": 250
+        },
+        {
+            "name": "g. Given {}, achieve {'cart': 1, 'rail': 20} [time <= 250]",
+            "initial": {},
+            "goal": {'cart': 3, 'rail': 40},
+            "time": 450
         }
     ]
 
     for case in test_cases:
         solve_test_case(data, case['initial'], case['goal'], case['time'], case['name'])
-	#if len(sys.argv) > 1:
-	#
- 	#rules_filename = sys.argv[1]
-
-	#with open(rules_filename) as f:
-	#	data = json.load(f)
-
-	#state = set_up_state(data, 'agent')
-	#goals = set_up_goals(data, 'agent')
-    # pyhop.print_operators()
-	#pyhop.print_methods()
-
-	# Hint: verbose output can take a long time even if the solution is correct; 
-	# try verbose=1 if it is taking too long
-	#pyhop.pyhop(state, goals, verbose=1)
-	# pyhop.pyhop(state, [('have_enough', 'agent', 'cart', 1),('have_enough', 'agent', 'rail', 20)], verbose=3)
+    #pyhop.print_operators()
+    #pyhop.print_methods()
