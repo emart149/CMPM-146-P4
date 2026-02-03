@@ -64,6 +64,59 @@ def m_ore(state, ID):
         return [('op_stone_pickaxe_for_ore', ID)]
     
     return [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)]
+"""
+def make_gather_method(tool_checks, fallback):
+    """
+    Generates a method that checks for tools in order.
+    tool_checks: List of tuples (tool_name, op_name)
+    fallback: Function that returns the default task list if no tool is found
+    """
+    def method(state, ID):
+        # Check every tool in the priority list
+        for tool, op in tool_checks:
+            if getattr(state, tool)[ID] >= 1:
+                return [(op, ID)]
+        # If we have none, do the fallback
+        return fallback(ID)
+    return method
+# 1. Define the specific tools/ops for wood
+wood_tools = [
+    ('iron_axe', 'op_iron_axe_for_wood'),
+    ('stone_axe', 'op_stone_axe_for_wood'),
+    ('wooden_axe', 'op_wooden_axe_for_wood')
+]
+# Wood falls back to punching
+m_get_wood = make_gather_method(wood_tools, lambda ID: [('op_punch_for_wood', ID)])
+
+# 2. Define picks for cobble/coal (same tools, different ops)
+# Note: These fall back to CRAFTING a wooden pickaxe, not punching
+def pick_fallback(op_name):
+    return lambda ID: [('have_enough', ID, 'wooden_pickaxe', 1), (op_name, ID)]
+
+cobble_tools = [
+    ('iron_pickaxe', 'op_iron_pickaxe_for_cobble'),
+    ('stone_pickaxe', 'op_stone_pickaxe_for_cobble'),
+    ('wooden_pickaxe', 'op_wooden_pickaxe_for_cobble')
+]
+m_get_cobble = make_gather_method(cobble_tools, pick_fallback('op_wooden_pickaxe_for_cobble'))
+
+coal_tools = [
+    ('iron_pickaxe', 'op_iron_pickaxe_for_coal'),
+    ('stone_pickaxe', 'op_stone_pickaxe_for_coal'),
+    ('wooden_pickaxe', 'op_wooden_pickaxe_for_coal')
+]
+m_get_coal = make_gather_method(coal_tools, pick_fallback('op_wooden_pickaxe_for_coal'))
+
+# 3. Ore (Requires at least stone)
+ore_tools = [
+    ('iron_pickaxe', 'op_iron_pickaxe_for_ore'),
+    ('stone_pickaxe', 'op_stone_pickaxe_for_ore')
+]
+# Ore falls back to crafting a STONE pickaxe
+m_get_ore = make_gather_method(ore_tools, lambda ID: [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)])
+# -----------------------------------------------------------------
+
+def _order_consumes(consumes, dep_map):
 
 def set_order(consumes, dep_map):
     items = list(consumes.keys())
@@ -147,6 +200,8 @@ def make_method(name, rule, tools=None, dep_map=None):
     return method
 
 def declare_methods(data):
+    # some recipes are faster than others for the same product even though they might require extra tools
+    # sort the recipes so that faster recipes go first
     tools = set(data.get("Tools", [])) | {"bench", "furnace"}
     
     dep_map = {}
@@ -216,6 +271,9 @@ def declare_operators(data):
     pyhop.declare_operators(*operators_list)
 
 def add_heuristic(data, ID):
+    # prune search branch if heuristic() returns True
+    # do not change parameters to heuristic(), but can add more heuristic functions with the same parameters:
+    # e.g. def heuristic2
     tool_set = set(data.get("Tools", [])) | {"bench", "furnace"}
 
     def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
