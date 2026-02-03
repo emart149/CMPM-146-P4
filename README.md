@@ -1,3 +1,6 @@
+Edward- manualHTN.py
+Shaun- autoHTN.py- make/declare methods/operators
+Adrian- autoHTN.py- Heuristics/Ordering
 We chose to program the first 3 heuristics.
 1. Pruning
    -We found that if the depth exceeds a certain amount, it starts to run on infinitely, and so we capped it at 1000
