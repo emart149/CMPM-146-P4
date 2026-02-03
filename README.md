@@ -1,4 +1,4 @@
-Edward- manualHTN.py
+Elijah- manualHTN.py - make / declare operators
 Shaun- autoHTN.py- make/declare methods/operators
 Adrian- autoHTN.py- Heuristics/Ordering
 We chose to program the first 3 heuristics.
