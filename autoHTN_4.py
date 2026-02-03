@@ -81,6 +81,7 @@ def set_order(consumes, depth_stack):
 
     item_set = set(items)
 
+    # adjacency: x -> y if x depends on y and both are in the consumes set
     adj = {
         x: [y for y in depth_stack.get(x, set()) if y in item_set and y != x]
         for x in items
@@ -110,17 +111,58 @@ def set_order(consumes, depth_stack):
     return out
 
 
-def make_method(name, rule, tools=None, depth_stack=None):
-    prod = rule.get("Produces", {})
-    req = rule.get("Requires", {})
-    cons = rule.get("Consumes", {})
-    t_c = rule.get("Time", 0)
+# def make_method(name, rule, tools=None, depth_stack=None):
+#     prod = rule.get("Produces", {})
+#     req = rule.get("Requires", {})
+#     cons = rule.get("Consumes", {})
+#     t_c = rule.get("Time", 0)
     
-    depth_stack = depth_stack or {}
-    cons_order = set_order(cons, depth_stack)
+#     depth_stack = depth_stack or {}
+#     cons_order = set_order(cons, depth_stack)
 
-    if 'iron_pickaxe' in prod and 'stick' in cons and 'ingot' in cons:
-        cons_order = ['ingot', 'stick']
+#     def tier(tool_name):
+#         if tool_name.startswith("wooden_"): return 1
+#         if tool_name.startswith("stone_"):  return 2
+#         if tool_name.startswith("iron_"):   return 3
+#         if tool_name in ("bench", "furnace"): return 0
+#         return 0
+
+#     req_tool_tier = 0
+#     for item in req:
+#         if item in (tools or set()):
+#             req_tool_tier = max(req_tool_tier, tier(item))
+
+#     def method(state, ID):
+#         subtasks = []
+#         for item, amount in req.items():
+#             subtasks.append(('have_enough', ID, item, amount))
+
+#         for item in cons_order:
+#              amount = cons[item]
+#              subtasks.append(('have_enough', ID, item, amount))
+
+#         op_name = 'op_{}'.format(name.replace(' ', '_'))
+#         subtasks.append((op_name, ID))
+
+#         return subtasks
+
+#     method.__name__ = 'produce_{}'.format(name.replace(' ', '_'))
+    
+#     method._meta = {
+#         "tier": req_tool_tier,
+#         "time": t_c,
+#         "n_subtasks": 1 + len(req) + len(cons)
+#     }
+#     return method
+
+def make_method(name, rule, tools=None, consumes_order=None):
+    prod = rule.get("Produces", {})
+    req  = rule.get("Requires", {})
+    cons = rule.get("Consumes", {})
+    t_c  = rule.get("Time", 0)
+
+    if consumes_order is None:
+        consumes_order = list(cons.keys())
 
     def tier(tool_name):
         if tool_name.startswith("wooden_"): return 1
@@ -129,59 +171,67 @@ def make_method(name, rule, tools=None, depth_stack=None):
         if tool_name in ("bench", "furnace"): return 0
         return 0
 
-    req_tool_tier = 0
+    required_tool_tier = 0
     for item in req:
         if item in (tools or set()):
-            req_tool_tier = max(req_tool_tier, tier(item))
+            required_tool_tier = max(required_tool_tier, tier(item))
 
     def method(state, ID):
         subtasks = []
+
         for item, amount in req.items():
             subtasks.append(('have_enough', ID, item, amount))
 
-        for item in cons_order:
-             amount = cons[item]
-             subtasks.append(('have_enough', ID, item, amount))
+        for item in consumes_order:
+            subtasks.append(('have_enough', ID, item, cons[item]))
 
         op_name = 'op_{}'.format(name.replace(' ', '_'))
         subtasks.append((op_name, ID))
-
         return subtasks
 
-    method.__name__ = 'produce_{}'.format(name.replace(' ', '_'))
-    
+    method.__name__ = 'method_{}'.format(name.replace(' ', '_'))
+
     method._meta = {
-        "tier": req_tool_tier,
+        "tier": required_tool_tier,
         "time": t_c,
-        "n_subtasks": 1 + len(req) + len(cons)
+        "n_subtasks": 1 + len(req) + len(cons),
+        "produces": list(prod.keys())
     }
     return method
 
 def declare_methods(data):
-    # some recipes are faster than others for the same product even though they might require extra tools
-    # sort the recipes so that faster recipes go first
     tools = set(data.get("Tools", [])) | {"bench", "furnace"}
-    
-    depth_stack = {}
+
+    dep_map = {}
     for rule in data['Recipes'].values():
-        for prod in rule.get('Produces', {}):
-            depth_stack.setdefault(prod, set()).update(rule.get("Consumes", {}).keys())
+        for p in rule.get('Produces', {}):
+            dep_map.setdefault(p, set()).update(rule.get("Consumes", {}).keys())
 
     rec_prod = {}
-    
+
     for rec_name, rule in data['Recipes'].items():
         for product in rule['Produces']:
             if product not in rec_prod:
                 rec_prod[product] = []
-            
-            mth = make_method(rec_name, rule, tools=tools, depth_stack=depth_stack)
+
+            cons = rule.get("Consumes", {})
+            cons_order = set_order(cons, dep_map)
+
+            # Forces ingot before stick if both in recipe
+            if 'ingot' in cons and 'stick' in cons:
+                cons_order = (
+                    ['ingot']
+                    + [x for x in cons_order if x not in ('ingot', 'stick')]
+                    + ['stick']
+                )
+
+            mth = make_method(rec_name, rule, tools=tools, consumes_order=cons_order)
             rec_prod[product].append(mth)
 
-    for product, method_list in rec_prod.items():        
+    for product, method_list in rec_prod.items():
         method_list.sort(key=lambda m: (m._meta["tier"], m._meta["time"], m._meta["n_subtasks"]))
         pyhop.declare_methods('produce_{}'.format(product), *method_list)
 
-    # Use the best tool for the job
     pyhop.declare_methods("produce_wood", m_wood)
     pyhop.declare_methods("produce_cobble", m_cobble)
     pyhop.declare_methods("produce_coal", m_coal)
@@ -255,10 +305,11 @@ def add_heuristic(data, ID):
 
     pyhop.add_check(heuristic)
 
-def define_ordering(data, ID):
-    def reorder_methods(state, curr_task, tasks, plan, depth, calling_stack, methods):
-        return methods
-    pyhop.define_ordering(reorder_methods)
+# Unused
+# def define_ordering(data, ID):
+#     def reorder_methods(state, curr_task, tasks, plan, depth, calling_stack, methods):
+#         return methods
+#     pyhop.define_ordering(reorder_methods)
 
 def set_up_state(data, ID, time=0):
     state = pyhop.State('state')
@@ -308,7 +359,7 @@ if __name__ == '__main__':
     declare_operators(data)
     declare_methods(data)
     add_heuristic(data, 'agent')
-    define_ordering(data, 'agent')
+    # define_ordering(data, 'agent')
 
     test_cases = [
         {
