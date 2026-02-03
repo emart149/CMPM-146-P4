@@ -64,7 +64,7 @@ def m_ore(state, ID):
         return [('op_stone_pickaxe_for_ore', ID)]
     
     return [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)]
-"""
+
 def make_gather_method(tool_checks, fallback):
     """
     Generates a method that checks for tools in order.
@@ -116,7 +116,7 @@ ore_tools = [
 m_get_ore = make_gather_method(ore_tools, lambda ID: [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)])
 # -----------------------------------------------------------------
 
-def _order_consumes(consumes, dep_map):
+
 
 def set_order(consumes, dep_map):
     items = list(consumes.keys())
