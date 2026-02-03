@@ -21,53 +21,10 @@ def produce(state, ID, item):
 
 pyhop.declare_methods('produce', produce)
 
-def m_wood(state, ID):
-    if getattr(state, 'iron_axe')[ID] >= 1:
-        return [('op_iron_axe_for_wood', ID)]
-    
-    if getattr(state, 'stone_axe')[ID] >= 1:
-        return [('op_stone_axe_for_wood', ID)]
-    
-    if getattr(state, 'wooden_axe')[ID] >= 1:
-        return [('op_wooden_axe_for_wood', ID)]
-    
-    return [('op_punch_for_wood', ID)]
-
-def m_cobble(state, ID):
-    if getattr(state, 'iron_pickaxe')[ID] >= 1:
-        return [('op_iron_pickaxe_for_cobble', ID)]
-    
-    if getattr(state, 'stone_pickaxe')[ID] >= 1:
-        return [('op_stone_pickaxe_for_cobble', ID)]
-    
-    if getattr(state, 'wooden_pickaxe')[ID] >= 1:
-        return [('op_wooden_pickaxe_for_cobble', ID)]
-    
-    return [('have_enough', ID, 'wooden_pickaxe', 1), ('op_wooden_pickaxe_for_cobble', ID)]
-
-def m_coal(state, ID):
-    if getattr(state, 'iron_pickaxe')[ID] >= 1:
-        return [('op_iron_pickaxe_for_coal', ID)]
-    
-    if getattr(state, 'stone_pickaxe')[ID] >= 1:
-        return [('op_stone_pickaxe_for_coal', ID)]
-    
-    if getattr(state, 'wooden_pickaxe')[ID] >= 1:
-        return [('op_wooden_pickaxe_for_coal', ID)]
-    return [('have_enough', ID, 'wooden_pickaxe', 1), ('op_wooden_pickaxe_for_coal', ID)]
-
-def m_ore(state, ID):
-    if getattr(state, 'iron_pickaxe')[ID] >= 1:
-        return [('op_iron_pickaxe_for_ore', ID)]
-    
-    if getattr(state, 'stone_pickaxe')[ID] >= 1:
-        return [('op_stone_pickaxe_for_ore', ID)]
-    
-    return [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)]
-
-def make_gather_method(tool_checks, fallback):
+def tool_select(tool_checks, fallback):
     """
-    Generates a method that checks for tools in order.
+    Back to what we talked about last night with the tools. Cart was failing because it tried to use wooden tools
+    when it really needed stone or better. It kept on retrying with wooden tools and failing. This is why the time was going backwards.
     tool_checks: List of tuples (tool_name, op_name)
     fallback: Function that returns the default task list if no tool is found
     """
@@ -79,14 +36,14 @@ def make_gather_method(tool_checks, fallback):
         # If we have none, do the fallback
         return fallback(ID)
     return method
-# 1. Define the specific tools/ops for wood
+# 1. Define tools and gathering wood.
 wood_tools = [
     ('iron_axe', 'op_iron_axe_for_wood'),
     ('stone_axe', 'op_stone_axe_for_wood'),
     ('wooden_axe', 'op_wooden_axe_for_wood')
 ]
 # Wood falls back to punching
-m_get_wood = make_gather_method(wood_tools, lambda ID: [('op_punch_for_wood', ID)])
+m_wood = tool_select(wood_tools, lambda ID: [('op_punch_for_wood', ID)])
 
 # 2. Define picks for cobble/coal (same tools, different ops)
 # Note: These fall back to CRAFTING a wooden pickaxe, not punching
@@ -98,24 +55,23 @@ cobble_tools = [
     ('stone_pickaxe', 'op_stone_pickaxe_for_cobble'),
     ('wooden_pickaxe', 'op_wooden_pickaxe_for_cobble')
 ]
-m_get_cobble = make_gather_method(cobble_tools, pick_fallback('op_wooden_pickaxe_for_cobble'))
+m_cobble = tool_select(cobble_tools, pick_fallback('op_wooden_pickaxe_for_cobble'))
 
 coal_tools = [
     ('iron_pickaxe', 'op_iron_pickaxe_for_coal'),
     ('stone_pickaxe', 'op_stone_pickaxe_for_coal'),
     ('wooden_pickaxe', 'op_wooden_pickaxe_for_coal')
 ]
-m_get_coal = make_gather_method(coal_tools, pick_fallback('op_wooden_pickaxe_for_coal'))
+m_coal = tool_select(coal_tools, pick_fallback('op_wooden_pickaxe_for_coal'))
 
-# 3. Ore (Requires at least stone)
+# 3. Ore (requires stone))
 ore_tools = [
     ('iron_pickaxe', 'op_iron_pickaxe_for_ore'),
     ('stone_pickaxe', 'op_stone_pickaxe_for_ore')
 ]
-# Ore falls back to crafting a STONE pickaxe
-m_get_ore = make_gather_method(ore_tools, lambda ID: [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)])
+# Ore falls back to stone pickaxe
+m_ore = tool_select(ore_tools, lambda ID: [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)])
 # -----------------------------------------------------------------
-
 
 
 def set_order(consumes, dep_map):
