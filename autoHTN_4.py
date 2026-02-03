@@ -110,51 +110,6 @@ def set_order(consumes, depth_stack):
     out.reverse()
     return out
 
-
-# def make_method(name, rule, tools=None, depth_stack=None):
-#     prod = rule.get("Produces", {})
-#     req = rule.get("Requires", {})
-#     cons = rule.get("Consumes", {})
-#     t_c = rule.get("Time", 0)
-    
-#     depth_stack = depth_stack or {}
-#     cons_order = set_order(cons, depth_stack)
-
-#     def tier(tool_name):
-#         if tool_name.startswith("wooden_"): return 1
-#         if tool_name.startswith("stone_"):  return 2
-#         if tool_name.startswith("iron_"):   return 3
-#         if tool_name in ("bench", "furnace"): return 0
-#         return 0
-
-#     req_tool_tier = 0
-#     for item in req:
-#         if item in (tools or set()):
-#             req_tool_tier = max(req_tool_tier, tier(item))
-
-#     def method(state, ID):
-#         subtasks = []
-#         for item, amount in req.items():
-#             subtasks.append(('have_enough', ID, item, amount))
-
-#         for item in cons_order:
-#              amount = cons[item]
-#              subtasks.append(('have_enough', ID, item, amount))
-
-#         op_name = 'op_{}'.format(name.replace(' ', '_'))
-#         subtasks.append((op_name, ID))
-
-#         return subtasks
-
-#     method.__name__ = 'produce_{}'.format(name.replace(' ', '_'))
-    
-#     method._meta = {
-#         "tier": req_tool_tier,
-#         "time": t_c,
-#         "n_subtasks": 1 + len(req) + len(cons)
-#     }
-#     return method
-
 def make_method(name, rule, tools=None, consumes_order=None):
     prod = rule.get("Produces", {})
     req  = rule.get("Requires", {})
