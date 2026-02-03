@@ -314,10 +314,9 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name):
 
         print(f"SUCCESS: Plan found with {len(plan)} steps.")
         print(f"Time cost: {total_time_used}  |  Remainging time: {time_remaining}")
-        print(f"IRL runtime: {runtime_sec:.4f} seconds")
     else:
         print("FAILURE: No plan found.")
-        print(f"IRL runtime: {runtime_sec:.4f} seconds")
+
 
 if __name__ == '__main__':
     rules_filename = 'crafting.json'
@@ -367,9 +366,9 @@ if __name__ == '__main__':
             "time": 250
         },
         {
-            "name": "g. Given {}, achieve {'cart': 1, 'rail': 20} [time <= 250]",
+            "name": "custom. Given {}, achieve {'cart': 3, 'rail': 48} [time <= 250]",
             "initial": {},
-            "goal": {'cart': 3, 'rail': 40},
+            "goal": {'cart': 3, 'rail': 48},
             "time": 450
         }
     ]
