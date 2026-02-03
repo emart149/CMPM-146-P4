@@ -5,9 +5,7 @@ def check_enough(state, ID, item, num):
     if getattr(state, item)[ID] >= num:
         return []
 
-    # OPTIMIZATION: Strategic investment (ported from wautoHTN.py)
-    # If we need a large amount of basic resources, force an upgrade to a stone pickaxe.
-    # This prevents the planner from gathering 20 items with a slow wooden pickaxe.
+    # Forces an upgrade to a better tool if we need a lot of resources
     if item in ('cobble', 'coal') and num >= 8 and getattr(state, 'stone_pickaxe')[ID] < 1:
         return [('have_enough', ID, 'stone_pickaxe', 1), ('produce', ID, item), ('have_enough', ID, item, num)]
 
@@ -23,46 +21,51 @@ def produce(state, ID, item):
 
 pyhop.declare_methods('produce', produce)
 
-# --- DETERMINISTIC GATHERING METHODS (Ported from wautoHTN.py) ---
-# These prevent the planner from branching into inefficient tools (e.g. punching when you have an axe).
-
-def m_get_wood(state, ID):
+def m_wood(state, ID):
     if getattr(state, 'iron_axe')[ID] >= 1:
         return [('op_iron_axe_for_wood', ID)]
+    
     if getattr(state, 'stone_axe')[ID] >= 1:
         return [('op_stone_axe_for_wood', ID)]
+    
     if getattr(state, 'wooden_axe')[ID] >= 1:
         return [('op_wooden_axe_for_wood', ID)]
+    
     return [('op_punch_for_wood', ID)]
 
-def m_get_cobble(state, ID):
+def m_cobble(state, ID):
     if getattr(state, 'iron_pickaxe')[ID] >= 1:
         return [('op_iron_pickaxe_for_cobble', ID)]
+    
     if getattr(state, 'stone_pickaxe')[ID] >= 1:
         return [('op_stone_pickaxe_for_cobble', ID)]
+    
     if getattr(state, 'wooden_pickaxe')[ID] >= 1:
         return [('op_wooden_pickaxe_for_cobble', ID)]
+    
     return [('have_enough', ID, 'wooden_pickaxe', 1), ('op_wooden_pickaxe_for_cobble', ID)]
 
-def m_get_coal(state, ID):
+def m_coal(state, ID):
     if getattr(state, 'iron_pickaxe')[ID] >= 1:
         return [('op_iron_pickaxe_for_coal', ID)]
+    
     if getattr(state, 'stone_pickaxe')[ID] >= 1:
         return [('op_stone_pickaxe_for_coal', ID)]
+    
     if getattr(state, 'wooden_pickaxe')[ID] >= 1:
         return [('op_wooden_pickaxe_for_coal', ID)]
     return [('have_enough', ID, 'wooden_pickaxe', 1), ('op_wooden_pickaxe_for_coal', ID)]
 
-def m_get_ore(state, ID):
+def m_ore(state, ID):
     if getattr(state, 'iron_pickaxe')[ID] >= 1:
         return [('op_iron_pickaxe_for_ore', ID)]
+    
     if getattr(state, 'stone_pickaxe')[ID] >= 1:
         return [('op_stone_pickaxe_for_ore', ID)]
+    
     return [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)]
 
-# -----------------------------------------------------------------
-
-def _order_consumes(consumes, dep_map):
+def set_order(consumes, dep_map):
     items = list(consumes.keys())
     if len(items) <= 1:
         return items
@@ -97,15 +100,15 @@ def _order_consumes(consumes, dep_map):
     return out
 
 def make_method(name, rule, tools=None, dep_map=None):
-    produces = rule.get("Produces", {})
-    requires = rule.get("Requires", {})
-    consumes = rule.get("Consumes", {})
-    time_cost = rule.get("Time", 0)
+    prod = rule.get("Produces", {})
+    req = rule.get("Requires", {})
+    cons = rule.get("Consumes", {})
+    t_c = rule.get("Time", 0)
     
     dep_map = dep_map or {}
-    consumes_order = _order_consumes(consumes, dep_map)
+    consumes_order = set_order(cons, dep_map)
 
-    if 'iron_pickaxe' in produces and 'stick' in consumes and 'ingot' in consumes:
+    if 'iron_pickaxe' in prod and 'stick' in cons and 'ingot' in cons:
         consumes_order = ['ingot', 'stick']
 
     def tier(tool_name):
@@ -116,17 +119,17 @@ def make_method(name, rule, tools=None, dep_map=None):
         return 0
 
     required_tool_tier = 0
-    for item in requires:
+    for item in req:
         if item in (tools or set()):
             required_tool_tier = max(required_tool_tier, tier(item))
 
     def method(state, ID):
         subtasks = []
-        for item, amount in requires.items():
+        for item, amount in req.items():
             subtasks.append(('have_enough', ID, item, amount))
 
         for item in consumes_order:
-             amount = consumes[item]
+             amount = cons[item]
              subtasks.append(('have_enough', ID, item, amount))
 
         op_name = 'op_{}'.format(name.replace(' ', '_'))
@@ -138,8 +141,8 @@ def make_method(name, rule, tools=None, dep_map=None):
     
     method._meta = {
         "tier": required_tool_tier,
-        "time": time_cost,
-        "n_subtasks": 1 + len(requires) + len(consumes)
+        "time": t_c,
+        "n_subtasks": 1 + len(req) + len(cons)
     }
     return method
 
@@ -161,43 +164,41 @@ def declare_methods(data):
             mth = make_method(rec_name, rule, tools=tools, dep_map=dep_map)
             rec_prod[product].append(mth)
 
-    for product, method_list in rec_prod.items():
-        # Sort generic methods by tier/time
+    for product, method_list in rec_prod.items():        
         method_list.sort(key=lambda m: (m._meta["tier"], m._meta["time"], m._meta["n_subtasks"]))
         pyhop.declare_methods('produce_{}'.format(product), *method_list)
 
-    # OVERRIDE: Register deterministic gatherers for raw resources
-    # This ensures we use the "Best Tool" logic instead of the generic sorted list
-    pyhop.declare_methods("produce_wood", m_get_wood)
-    pyhop.declare_methods("produce_cobble", m_get_cobble)
-    pyhop.declare_methods("produce_coal", m_get_coal)
-    pyhop.declare_methods("produce_ore", m_get_ore)
+    # Use the best tool for the job
+    pyhop.declare_methods("produce_wood", m_wood)
+    pyhop.declare_methods("produce_cobble", m_cobble)
+    pyhop.declare_methods("produce_coal", m_coal)
+    pyhop.declare_methods("produce_ore", m_ore)
 
 def make_operator(rule):
-    produces = rule.get("Produces", {})
-    requires = rule.get("Requires", {})
-    consumes = rule.get("Consumes", {})
-    time_cost = rule.get("Time", 0)
+    prod = rule.get("Produces", {})
+    req = rule.get("Requires", {})
+    cons = rule.get("Consumes", {})
+    t_c = rule.get("Time", 0)
 
     def operator(state, ID):
-        if state.time[ID] < time_cost:
+        if state.time[ID] < t_c:
             return False
 
-        for item, amt in requires.items():
+        for item, amt in req.items():
             if getattr(state, item)[ID] < amt:
                 return False
 
-        for item, amt in consumes.items():
+        for item, amt in cons.items():
             if getattr(state, item)[ID] < amt:
                 return False
 
-        state.time[ID] -= time_cost
+        state.time[ID] -= t_c
         
-        for item, amt in consumes.items():
+        for item, amt in cons.items():
             curr = getattr(state, item)[ID]
             setattr(state, item, {ID: curr - amt})
 
-        for item, amt in produces.items():
+        for item, amt in prod.items():
             curr = getattr(state, item)[ID]
             setattr(state, item, {ID: curr + amt})
 
@@ -218,7 +219,6 @@ def add_heuristic(data, ID):
     tool_set = set(data.get("Tools", [])) | {"bench", "furnace"}
 
     def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
-        # Bumped depth limit to 1200 to match wautoHTN
         if depth > 1200:
             return True
 
