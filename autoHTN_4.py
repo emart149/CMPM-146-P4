@@ -73,39 +73,42 @@ ore_tools = [
 # Ore falls back to stone pickaxe
 m_ore = tool_select(ore_tools, lambda ID: [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)])
 
+
 def set_order(consumes, depth_stack):
     items = list(consumes.keys())
     if len(items) <= 1:
         return items
 
     item_set = set(items)
-    graph = {x: set() for x in items}
-    
-    for x in items:
-        for y in depth_stack.get(x, set()):
-            if y in item_set and y != x:
-                graph[x].add(y)
 
-    indeg = {x: 0 for x in items}
-    for x, ys in graph.items():
-        for y in ys:
-            indeg[y] += 1
-            
-    queue = [x for x in items if indeg[x] == 0]
+    adj = {
+        x: [y for y in depth_stack.get(x, set()) if y in item_set and y != x]
+        for x in items
+    }
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {x: WHITE for x in items}
     out = []
-    
-    while queue:
-        n = queue.pop()
-        out.append(n)
-        for y in graph[n]:
-            indeg[y] -= 1
-            if indeg[y] == 0:
-                queue.append(y)
-                
-    if len(out) != len(items):
-        return items 
-        
+
+    def dfs(x):
+        color[x] = GRAY
+        for y in adj[x]:
+            if color[y] == GRAY:
+                return False  
+            if color[y] == WHITE and not dfs(y):
+                return False
+        color[x] = BLACK
+        out.append(x)
+        return True
+
+    for x in items:
+        if color[x] == WHITE:
+            if not dfs(x):
+                return items  
+
+    out.reverse()
     return out
+
 
 def make_method(name, rule, tools=None, depth_stack=None):
     prod = rule.get("Produces", {})
@@ -114,10 +117,10 @@ def make_method(name, rule, tools=None, depth_stack=None):
     t_c = rule.get("Time", 0)
     
     depth_stack = depth_stack or {}
-    consumes_order = set_order(cons, depth_stack)
+    cons_order = set_order(cons, depth_stack)
 
     if 'iron_pickaxe' in prod and 'stick' in cons and 'ingot' in cons:
-        consumes_order = ['ingot', 'stick']
+        cons_order = ['ingot', 'stick']
 
     def tier(tool_name):
         if tool_name.startswith("wooden_"): return 1
@@ -126,17 +129,17 @@ def make_method(name, rule, tools=None, depth_stack=None):
         if tool_name in ("bench", "furnace"): return 0
         return 0
 
-    required_tool_tier = 0
+    req_tool_tier = 0
     for item in req:
         if item in (tools or set()):
-            required_tool_tier = max(required_tool_tier, tier(item))
+            req_tool_tier = max(req_tool_tier, tier(item))
 
     def method(state, ID):
         subtasks = []
         for item, amount in req.items():
             subtasks.append(('have_enough', ID, item, amount))
 
-        for item in consumes_order:
+        for item in cons_order:
              amount = cons[item]
              subtasks.append(('have_enough', ID, item, amount))
 
@@ -148,7 +151,7 @@ def make_method(name, rule, tools=None, depth_stack=None):
     method.__name__ = 'produce_{}'.format(name.replace(' ', '_'))
     
     method._meta = {
-        "tier": required_tool_tier,
+        "tier": req_tool_tier,
         "time": t_c,
         "n_subtasks": 1 + len(req) + len(cons)
     }
@@ -229,10 +232,10 @@ def add_heuristic(data, ID):
     # prune search branch if heuristic() returns True
     # do not change parameters to heuristic(), but can add more heuristic functions with the same parameters:
     # e.g. def heuristic2
-    tool_set = set(data.get("Tools", [])) | {"bench", "furnace"}
+    tools = set(data.get("Tools", [])) | {"bench", "furnace"}
 
     def heuristic(state, curr_task, tasks, plan, depth, calling_stack):
-        if depth > 1200:
+        if depth > 1000:
             return True
 
         task_name = curr_task[0]
@@ -240,10 +243,10 @@ def add_heuristic(data, ID):
         if task_name.startswith('produce_'):
             product = task_name.replace('produce_', '')
             
-            if product in tool_set and getattr(state, product)[ID] >= 1:
+            if product in tools and getattr(state, product)[ID] >= 1:
                 return True
 
-            if product in tool_set:
+            if product in tools:
                 for upstream_task in calling_stack:
                      if upstream_task[0] == task_name:
                          return True
