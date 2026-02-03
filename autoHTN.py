@@ -267,22 +267,15 @@ def add_heuristic(data, ID):
 #         return methods
 #     pyhop.define_ordering(reorder_methods)
 
-def set_up_state(data, ID, time=0):
+def set_up_state(data, ID):
     state = pyhop.State('state')
-    state.time = {ID: time}
-
+    setattr(state, 'time', {ID: data['Problem']['Time']})
     for item in data['Items']:
         setattr(state, item, {ID: 0})
-
     for item in data['Tools']:
         setattr(state, item, {ID: 0})
-
-    problem_data = data.get('Problem', data)
-    initial_data = problem_data.get('Initial', {})
-
-    for item, num in initial_data.items():
+    for item, num in data['Problem']['Initial'].items():
         setattr(state, item, {ID: num})
-
     return state
 
 def solve_test_case(data, initial_items, goal_items, max_time, case_name):
@@ -317,9 +310,17 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name):
     else:
         print("FAILURE: No plan found.")
 
+def set_up_goals(data, ID):
+    goals = []
+    for item, num in data['Problem']['Goal'].items():
+        goals.append(('have_enough', ID, item, num))
+    return goals
 
 if __name__ == '__main__':
+    import sys
     rules_filename = 'crafting.json'
+    if len(sys.argv) > 1:
+        rules_filename = sys.argv[1]
     with open(rules_filename) as f:
         data = json.load(f)
 
@@ -327,8 +328,14 @@ if __name__ == '__main__':
     declare_methods(data)
     add_heuristic(data, 'agent')
     # define_ordering(data, 'agent')
-
-    test_cases = [
+    time_limit = data['Problem']['Time']
+    state = set_up_state(data, 'agent')
+    goals = set_up_goals(data, 'agent')
+    pyhop.pyhop(state, goals, verbose=1)
+    #pyhop.print_operators()
+    #pyhop.print_methods()
+    
+    """test_cases = [
         {
             "name": "a. Given {'plank': 1}, achieve {'plank': 1} [time <= 0]",
             "initial": {'plank': 1},
@@ -376,4 +383,4 @@ if __name__ == '__main__':
     for case in test_cases:
         solve_test_case(data, case['initial'], case['goal'], case['time'], case['name'])
     #pyhop.print_operators()
-    #pyhop.print_methods()
+    #pyhop.print_methods()"""
