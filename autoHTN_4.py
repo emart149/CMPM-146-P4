@@ -36,6 +36,7 @@ def tool_select(tool_checks, fallback):
         # If we have none, do the fallback
         return fallback(ID)
     return method
+
 # 1. Define tools and gathering wood.
 wood_tools = [
     ('iron_axe', 'op_iron_axe_for_wood'),
@@ -71,10 +72,8 @@ ore_tools = [
 ]
 # Ore falls back to stone pickaxe
 m_ore = tool_select(ore_tools, lambda ID: [('have_enough', ID, 'stone_pickaxe', 1), ('op_stone_pickaxe_for_ore', ID)])
-# -----------------------------------------------------------------
 
-
-def set_order(consumes, dep_map):
+def set_order(consumes, depth_stack):
     items = list(consumes.keys())
     if len(items) <= 1:
         return items
@@ -83,7 +82,7 @@ def set_order(consumes, dep_map):
     graph = {x: set() for x in items}
     
     for x in items:
-        for y in dep_map.get(x, set()):
+        for y in depth_stack.get(x, set()):
             if y in item_set and y != x:
                 graph[x].add(y)
 
@@ -108,14 +107,14 @@ def set_order(consumes, dep_map):
         
     return out
 
-def make_method(name, rule, tools=None, dep_map=None):
+def make_method(name, rule, tools=None, depth_stack=None):
     prod = rule.get("Produces", {})
     req = rule.get("Requires", {})
     cons = rule.get("Consumes", {})
     t_c = rule.get("Time", 0)
     
-    dep_map = dep_map or {}
-    consumes_order = set_order(cons, dep_map)
+    depth_stack = depth_stack or {}
+    consumes_order = set_order(cons, depth_stack)
 
     if 'iron_pickaxe' in prod and 'stick' in cons and 'ingot' in cons:
         consumes_order = ['ingot', 'stick']
@@ -160,10 +159,10 @@ def declare_methods(data):
     # sort the recipes so that faster recipes go first
     tools = set(data.get("Tools", [])) | {"bench", "furnace"}
     
-    dep_map = {}
+    depth_stack = {}
     for rule in data['Recipes'].values():
         for prod in rule.get('Produces', {}):
-            dep_map.setdefault(prod, set()).update(rule.get("Consumes", {}).keys())
+            depth_stack.setdefault(prod, set()).update(rule.get("Consumes", {}).keys())
 
     rec_prod = {}
     
@@ -172,7 +171,7 @@ def declare_methods(data):
             if product not in rec_prod:
                 rec_prod[product] = []
             
-            mth = make_method(rec_name, rule, tools=tools, dep_map=dep_map)
+            mth = make_method(rec_name, rule, tools=tools, depth_stack=depth_stack)
             rec_prod[product].append(mth)
 
     for product, method_list in rec_prod.items():        
@@ -291,7 +290,7 @@ def solve_test_case(data, initial_items, goal_items, max_time, case_name):
     for item, num in goal_items.items():
         goals.append(('have_enough', 'agent', item, num))
 
-    plan = pyhop.pyhop(state, goals, verbose=1)
+    plan = pyhop.pyhop(state, goals, verbose=3)
     
     if plan is not False:
         print(f"SUCCESS: Plan found with {len(plan)} steps.")
@@ -349,3 +348,5 @@ if __name__ == '__main__':
 
     for case in test_cases:
         solve_test_case(data, case['initial'], case['goal'], case['time'], case['name'])
+    pyhop.print_operators()
+    pyhop.print_methods()
